@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Gioco Runner</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #000;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #endScreen {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(255,255,255,0.9);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+      font-size: 2em;
+      z-index: 2;
+    }
+
+    #restart {
+      font-size: 1em;
+      color: blue;
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="endScreen">
+    <div id="endMessage">Game Over</div>
+    <div id="restart">Premi SPAZIO per ricominciare</div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      groundLevel = canvas.height - 50;
+      player.y = groundLevel - player.height;
+    }
+    window.addEventListener("resize", resizeCanvas);
+
+    // Immagini
+    const bgImage = new Image();
+    bgImage.src = "Sfondo.jpg";
+
+    const treeImage = new Image();
+    treeImage.src = "Albero-SMO.png";
+
+    const bookImage = new Image();
+    bookImage.src = "Libro.png";
+
+    const playerImage = new Image();
+    playerImage.src = "Personaggio.png";
+
+    const goalImage = new Image();
+    goalImage.src = "Traguardo.png";
+
+    // Player
+    let player = {
+      x: 50,
+      y: 0,
+      width: 60,
+      height: 60,
+      yVelocity: 0,
+      jumping: false,
+      xVelocity: 0
+    };
+
+    let gravity = 1.5;
+    let groundLevel = 0;
+    let obstacles = [];
+    let frame = 0;
+    let speed = 5;
+    let score = 0;
+    let gameEnded = false;
+    let timeLeft = 30;
+    let showBook = false;
+    let showWin = false;
+    let goalReached = false;
+    let obstaclesAvoided = 0;
+    let goalShown = false;
+
+    function startGame() {
+      resizeCanvas();
+      obstacles = [];
+      frame = 0;
+      speed = 5;
+      score = 0;
+      gameEnded = false;
+      showBook = false;
+      showWin = false;
+      goalReached = false;
+      goalShown = false;
+      obstaclesAvoided = 0;
+      player.jumping = false;
+      player.yVelocity = 0;
+      player.xVelocity = 0;
+      document.getElementById("endScreen").style.display = "none";
+      update();
+    }
+
+    function drawPlayer() {
+      ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
+    }
+
+    function drawObstacle(ob) {
+      ctx.drawImage(treeImage, ob.x, ob.y - 20, ob.width, ob.height);
+    }
+
+    function update() {
+      if (gameEnded) {
+        if (showBook) {
+          ctx.drawImage(bookImage, canvas.width / 2 - 50, groundLevel - 120, 100, 100);
+          setTimeout(() => {
+            window.location.href = "https://www.youtube.com/watch?v=KgDPUVRPNucl";
+          }, 2000);
+        } else if (showWin) {
+          document.getElementById("endScreen").style.display = "flex";
+          document.getElementById("endMessage").textContent = "Hai vinto!";
+        }
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+      drawPlayer();
+
+      // Movimento orizzontale
+      player.x += player.xVelocity;
+
+      // Limiti orizzontali (non far uscire il player dal canvas)
+      if (player.x < 0) player.x = 0;
+      if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+      // Movimento del player in verticale (salto)
+      if (player.jumping) {
+        player.yVelocity += gravity;
+        player.y += player.yVelocity;
+        if (player.y >= groundLevel - player.height) {
+          player.y = groundLevel - player.height;
+          player.jumping = false;
+          player.yVelocity = 0;
+        }
+      }
+
+      // Generazione ostacoli
+      if (frame % 100 === 0 && !goalShown) {
+        obstacles.push({
+          x: canvas.width,
+          y: groundLevel - 20,
+          width: 80, // ingrandito
+          height: 100
+        });
+      }
+
+      // Ostacoli e goal
+      for (let i = 0; i < obstacles.length; i++) {
+        let ob = obstacles[i];
+        ob.x -= speed;
+
+        if (ob.type !== "goal") drawObstacle(ob);
+        else ctx.drawImage(goalImage, ob.x, ob.y - 50, 100, 100);
+
+        // Collisioni
+        if (
+          player.x < ob.x + ob.width &&
+          player.x + player.width > ob.x &&
+          player.y < ob.y + ob.height &&
+          player.y + player.height > ob.y
+        ) {
+          if (ob.type === "goal") {
+            gameEnded = true;
+            showWin = true;
+          } else {
+            gameEnded = true;
+            showEndScreen(false);
+          }
+          return;
+        }
+
+        // Superato l'ostacolo
+        if (!ob.passed && ob.x + ob.width < player.x) {
+          ob.passed = true;
+          if (ob.type !== "goal") obstaclesAvoided++;
+        }
+      }
+
+      // Mostra il traguardo dopo 5 ostacoli
+      if (obstaclesAvoided >= 5 && !goalShown) {
+        obstacles.push({
+          x: canvas.width,
+          y: groundLevel - 20,
+          width: 100,
+          height: 100,
+          type: "goal"
+        });
+        goalShown = true;
+      }
+
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, groundLevel, canvas.width, 10);
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "20px Arial";
+      ctx.fillText("Ostacoli evitati: " + obstaclesAvoided, 20, 30);
+
+      frame++;
+      requestAnimationFrame(update);
+    }
+
+    function showEndScreen(victory) {
+      if (victory) {
+        showBook = true;
+      } else {
+        document.getElementById("endScreen").style.display = "flex";
+        document.getElementById("endMessage").textContent = "Game Over";
+      }
+    }
+
+    document.addEventListener("keydown", function (e) {
+      if ((e.code === "Space" || e.code === "Enter") && gameEnded && !showBook && !showWin) {
+        startGame();
+      } else if (
+        (e.code === "Space" || e.code === "ArrowUp") &&
+        !player.jumping &&
+        !gameEnded
+      ) {
+        player.jumping = true;
+        player.yVelocity = -25; // salto più alto
+      }
+
+      // Movimento orizzontale
+      if (e.code === "ArrowRight") {
+        player.xVelocity = 5; // movimento a destra
+      } else if (e.code === "ArrowLeft") {
+        player.xVelocity = -5; // movimento a sinistra
+      }
+    });
+
+    document.addEventListener("keyup", function (e) {
+      // Fermiamo il movimento orizzontale quando non viene premuto il tasto
+      if (e.code === "ArrowRight" || e.code === "ArrowLeft") {
+        player.xVelocity = 0;
+      }
+    });
+
+    // Caricamento immagini
+    let imagesLoaded = 0;
+    function imageLoaded() {
+      imagesLoaded++;
+      if (imagesLoaded === 5) startGame();
+    }
+
+    bgImage.onload = imageLoaded;
+    treeImage.onload = imageLoaded;
+    bookImage.onload = imageLoaded;
+    playerImage.onload = imageLoaded;
+    goalImage.onload = imageLoaded;
+  </script>
+</body>
+</html>
